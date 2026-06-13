@@ -33,4 +33,19 @@
     <ProjectReference Include="..\..\google-api-dotnet-client\Src\Support\Google.Apis.Auth\Google.Apis.Auth.csproj" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
   </ItemGroup>
+  <!-- Clast: NuGet metadata stating this is the Clast republish (placed last to override upstream values). -->
+  <PropertyGroup Condition="'$(Clast)' == 'true'">
+    <Title>Clast republish of Google.Api.Gax.Rest</Title>
+    <Authors>clast-project</Authors>
+    <Company>clast-project</Company>
+    <Copyright>Clast republish. Based on Google.Api.Gax.Rest (BSD-3-Clause, Copyright Google LLC).</Copyright>
+    <PackageProjectUrl>https://github.com/clast-project/gax-dotnet</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/clast-project/gax-dotnet</RepositoryUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <Description>Clast republish of Google.Api.Gax.Rest: Newtonsoft.Json replaced with source-generated System.Text.Json, trimming/AOT-compatible, adds a net10.0 target. Namespaces and public type names are unchanged. Independent republish from the clast-project fork — not an official Google package.</Description>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(Clast)' == 'true'">
+    <None Include="..\CLAST_NUGET.md" Pack="true" PackagePath="README.md" />
+  </ItemGroup>
+
 </Project>
