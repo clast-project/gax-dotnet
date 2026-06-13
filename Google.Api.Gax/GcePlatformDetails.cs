@@ -5,8 +5,8 @@
  * https://developers.google.com/open-source/licenses/bsd
  */
 
-using Newtonsoft.Json.Linq;
 using System;
+using System.Text.Json.Nodes;
 
 namespace Google.Api.Gax
 {
@@ -26,12 +26,8 @@ namespace Google.Api.Gax
         public static GcePlatformDetails TryLoad(string metadataJson)
         {
             GaxPreconditions.CheckNotNull(metadataJson, nameof(metadataJson));
-            JObject metadata;
-            try
-            {
-                metadata = JObject.Parse(metadataJson);
-            }
-            catch
+            JsonObject metadata = PlatformMetadataJson.ParseObjectOrNull(metadataJson);
+            if (metadata is null)
             {
                 return null;
             }

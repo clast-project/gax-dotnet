@@ -3,20 +3,34 @@
   <Import Project="..\CommonProperties.xml" />
 
   <PropertyGroup>
-    <TargetFrameworks>netstandard2.0;net462</TargetFrameworks>
+    <TargetFrameworks>netstandard2.0;net8.0;net10.0</TargetFrameworks>
     <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+
+  <!-- Clast: the net10.0 target is validated for trimming/AOT. -->
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <IsAotCompatible>true</IsAotCompatible>
   </PropertyGroup>
 
   <!-- Packaging information -->
   <PropertyGroup>
-    <Title>Google API Common Protos</Title>
-    <Description>Common Protocol Buffer messages for Google APIs</Description>
+    <Title>Google API Extensions for REST</Title>
+    <Description>Support classes for Google API REST client libraries</Description>
+  </PropertyGroup>
+
+  <!-- Clast: republished under a Clast.* identity only when -p:Clast=true (see google-api-dotnet-client Google.Apis.Core.csproj). -->
+  <PropertyGroup Condition="'$(Clast)' == 'true'">
+    <PackageId>Clast.Google.Api.Gax.Rest</PackageId>
+    <AssemblyName>Clast.Google.Api.Gax.Rest</AssemblyName>
+    <AssemblyOriginatorKeyFile Condition="'$(ClastKeyPath)' != ''">$(ClastKeyPath)</AssemblyOriginatorKeyFile>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Google.Api.Gax\Google.Api.Gax.csproj" />
 
-    <PackageReference Include="Google.Apis.Auth" />
+    <!-- Clast: reference the locally-ported (System.Text.Json) Google.Apis.Auth (which transitively brings
+         Google.Apis + Google.Apis.Core) instead of the published Newtonsoft-based package. -->
+    <ProjectReference Include="..\..\google-api-dotnet-client\Src\Support\Google.Apis.Auth\Google.Apis.Auth.csproj" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
   </ItemGroup>
 </Project>

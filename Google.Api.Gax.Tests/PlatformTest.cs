@@ -177,16 +177,18 @@ namespace Google.Api.Gax.Tests
             Assert.Equal("platformintegrationtest", gke.ContainerName);
         }
 
-        const string metadataValid = "{'project':{'projectId':'FakeProjectId'},'instance':{'attributes':{'cluster-name':'FakeClusterName', 'cluster-location':'FakeClusterLocation'},'id':'123','zone':'projects/FakeProject/zones/FakeLocation'}}";
-        const string metadataIncomplete = "{'project':{'projectId':'FakeProjectId'},'instance':{'attr";
-        const string namespaceValid = "{'kind':'Namespace','metadata':{'name':'namespacename'}}";
-        const string namespaceMissingKind = "{'notkind':'Namespace','metadata':{'name':'namespacename'}}";
-        const string namespaceWrongKind = "{'kind':'NotNamespace','metadata':{'name':'namespacename'}}";
-        const string namespaceIncomplete = "{'kind':'Namespace','m";
-        const string podValid = "{'kind':'Pod','metadata':{'name':'podname','uid':'poduid'}}";
-        const string podMissingKind = "{'notkind':'Pod','metadata':{'name':'podname','uid':'poduid'}}";
-        const string podWrongKind = "{'kind':'NotPod','metadata':{'name':'podname','uid':'poduid'}}";
-        const string podIncomplete = "{'kind':'Pod','metadata':{";
+        // Clast: System.Text.Json requires double-quoted JSON (Newtonsoft tolerated single quotes). The production
+        // metadata server always returns valid double-quoted JSON; these fixtures are corrected to match (BC-011).
+        const string metadataValid = "{\"project\":{\"projectId\":\"FakeProjectId\"},\"instance\":{\"attributes\":{\"cluster-name\":\"FakeClusterName\", \"cluster-location\":\"FakeClusterLocation\"},\"id\":\"123\",\"zone\":\"projects/FakeProject/zones/FakeLocation\"}}";
+        const string metadataIncomplete = "{\"project\":{\"projectId\":\"FakeProjectId\"},\"instance\":{\"attr";
+        const string namespaceValid = "{\"kind\":\"Namespace\",\"metadata\":{\"name\":\"namespacename\"}}";
+        const string namespaceMissingKind = "{\"notkind\":\"Namespace\",\"metadata\":{\"name\":\"namespacename\"}}";
+        const string namespaceWrongKind = "{\"kind\":\"NotNamespace\",\"metadata\":{\"name\":\"namespacename\"}}";
+        const string namespaceIncomplete = "{\"kind\":\"Namespace\",\"m";
+        const string podValid = "{\"kind\":\"Pod\",\"metadata\":{\"name\":\"podname\",\"uid\":\"poduid\"}}";
+        const string podMissingKind = "{\"notkind\":\"Pod\",\"metadata\":{\"name\":\"podname\",\"uid\":\"poduid\"}}";
+        const string podWrongKind = "{\"kind\":\"NotPod\",\"metadata\":{\"name\":\"podname\",\"uid\":\"poduid\"}}";
+        const string podIncomplete = "{\"kind\":\"Pod\",\"metadata\":{";
         const string mountInfoValid = "1 2 3 /var/lib/kubelet/pods/poduid/containers/containername/ /dev/termination-log xyz\nabc";
         const string mountInfoMultipleContainers = "/var/lib/kubelet/pods/poduid/containers/containername1/ /dev/termination-log xyz\n1 2 3/var/lib/kubelet/pods/poduid/containers/containername2/ /dev/termination-log xyz";
         const string mountInfoMissing = "1 2 3 /var/lib/kubelet/pods/poduid/notcontainers/containername/ /dev/termination-log xyz\nabc";
