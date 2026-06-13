@@ -5,7 +5,6 @@
  * https://developers.google.com/open-source/licenses/bsd
  */
 
-using Newtonsoft.Json.Linq;
 using System;
 using System.IO;
 using System.Linq;
@@ -17,6 +16,7 @@ using System.Net.Security;
 using System.Reflection;
 #endif
 using System.Security.Cryptography.X509Certificates;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
@@ -95,11 +95,10 @@ namespace Google.Api.Gax
                 kubernetesToken = File.ReadAllText("/var/run/secrets/kubernetes.io/serviceaccount/token");
                 // On Windows GKE, we currently fail to load this certificate - so just skipping even an attempt
                 // when on .NET Framework seems reasonable.
-#if NETSTANDARD2_0_OR_GREATER
+#if NET9_0_OR_GREATER
+                kubernetesCaCert = X509CertificateLoader.LoadCertificateFromFile("/var/run/secrets/kubernetes.io/serviceaccount/ca.crt");
+#elif !NET462
                 kubernetesCaCert = new X509Certificate2("/var/run/secrets/kubernetes.io/serviceaccount/ca.crt");
-#elif NET462
-#else
-#error Unsupported platform
 #endif
                 mountInfo = File.ReadAllLines("/proc/self/mountinfo");
             }
@@ -132,9 +131,7 @@ namespace Google.Api.Gax
                     return chain.Build(cert) && chain.ChainElements[chain.ChainElements.Count - 1].Certificate.Thumbprint == kubernetesCaCert.Thumbprint;
                 };
             var handler = new HttpClientHandler();
-#if NETSTANDARD2_0_OR_GREATER
-            handler.ServerCertificateCustomValidationCallback = serverCertificateCustomValidationCallback;
-#elif NET462
+#if NET462
             // .NET 4.6.2 supposedly supports .NET Standard (which defines HttpClientHandler.ServerCertificateCustomValidationCallback),
             // but doesn't actually have that property. On the othe hand, it's possible that we're using this build of the library due to
             // targeting a later version of .NET Framework.
@@ -146,7 +143,7 @@ namespace Google.Api.Gax
                 callbackProperty.SetValue(handler, serverCertificateCustomValidationCallback);
             }
 #else
-#error Unsupported platform
+            handler.ServerCertificateCustomValidationCallback = serverCertificateCustomValidationCallback;
 #endif
             string namespaceJson = null;
             string podJson = null;
@@ -196,39 +193,36 @@ namespace Google.Api.Gax
         {
             GaxPreconditions.CheckNotNull(metadataJson, nameof(metadataJson));
             GaxPreconditions.CheckNotNull(kubernetesData, nameof(kubernetesData));
-            JObject metadata = null;
-            JObject namespaceData = null;
-            JObject podData = null;
             // Parse JSON, ignoring all errors; partially available data is supported
-            try { metadata = JObject.Parse(metadataJson); } catch { }
-            try { namespaceData = JObject.Parse(kubernetesData.NamespaceJson); } catch { }
-            try { podData = JObject.Parse(kubernetesData.PodJson); } catch { }
+            JsonObject metadata = PlatformMetadataJson.ParseObjectOrNull(metadataJson);
+            JsonObject namespaceData = PlatformMetadataJson.ParseObjectOrNull(kubernetesData.NamespaceJson);
+            JsonObject podData = PlatformMetadataJson.ParseObjectOrNull(kubernetesData.PodJson);
             if (metadata == null)
             {
                 // Metadata is required. If it's not present, or the JSON cannot be parsed, return null.
                 return null;
             }
-            if (namespaceData?["kind"]?.Value<string>() != "Namespace")
+            if (namespaceData?["kind"]?.ToString() != "Namespace")
             {
                 // If namespaceData looks corrupt/incomplete, ignore it.
                 namespaceData = null;
             }
-            if (podData?["kind"]?.Value<string>() != "Pod")
+            if (podData?["kind"]?.ToString() != "Pod")
             {
                 // If podData looks corrupt/incomplete, ignore it.
                 podData = null;
             }
-            var hostName = kubernetesData.PodName ?? podData?["metadata"]?["name"]?.Value<string>() ?? ""; // Pod name is the hostname
-            var projectId = metadata["project"]?["projectId"]?.Value<string>();
-            var clusterName = metadata["instance"]?["attributes"]?["cluster-name"]?.Value<string>();
-            var instanceId = metadata["instance"]?["id"]?.Value<string>();
-            var instanceZone = metadata["instance"]?["zone"]?.Value<string>();
-            var clusterLocation = metadata["instance"]?["attributes"]?["cluster-location"]?.Value<string>();
-            var namespaceId = namespaceData?["metadata"]?["name"]?.Value<string>() ?? kubernetesData.NamespaceName ?? "";
-            var podId = podData?["metadata"]?["name"]?.Value<string>() ?? kubernetesData.PodName ?? "";
+            var hostName = kubernetesData.PodName ?? podData?["metadata"]?["name"]?.ToString() ?? ""; // Pod name is the hostname
+            var projectId = metadata["project"]?["projectId"]?.ToString();
+            var clusterName = metadata["instance"]?["attributes"]?["cluster-name"]?.ToString();
+            var instanceId = metadata["instance"]?["id"]?.ToString();
+            var instanceZone = metadata["instance"]?["zone"]?.ToString();
+            var clusterLocation = metadata["instance"]?["attributes"]?["cluster-location"]?.ToString();
+            var namespaceId = namespaceData?["metadata"]?["name"]?.ToString() ?? kubernetesData.NamespaceName ?? "";
+            var podId = podData?["metadata"]?["name"]?.ToString() ?? kubernetesData.PodName ?? "";
 
             // Note: unlike other variables, we keep null as null here - we're not propagating it anywhere beyond the DeriveContainerName method.
-            var podUid = podData?["metadata"]?["uid"]?.Value<string>();
+            var podUid = podData?["metadata"]?["uid"]?.ToString();
             var containerName = DeriveContainerName(podUid, kubernetesData.MountInfo) ?? "";
 
             if (hostName != null && projectId != null && clusterName != null && instanceId != null &&
