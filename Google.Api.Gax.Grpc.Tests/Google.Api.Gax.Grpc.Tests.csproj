@@ -3,7 +3,9 @@
   <Import Project="..\CommonProperties.Test.xml" />
 
   <PropertyGroup>
-    <TargetFrameworks>net8.0;net462</TargetFrameworks>
+    <!-- Clast: net472 (not net462) for the .NET Framework test target — net462 cannot reliably consume the
+         netstandard2.0 builds of the ported Clast libraries (Google.Apis.Auth etc.); see test-tfm-net472. -->
+    <TargetFrameworks>net8.0;net472</TargetFrameworks>
     <TargetFrameworks Condition="'$(OS)' != 'Windows_NT'">net8.0</TargetFrameworks>
     <LangVersion>latest</LangVersion>
   </PropertyGroup>
@@ -13,11 +15,19 @@
     <PackageReference Include="Microsoft.Extensions.Logging" />
     <PackageReference Include="System.Linq.Async" />
     <PackageReference Include="Grpc.Core" />
+    <!-- Clast: this test uses Newtonsoft's JObject as a sample payload type for PartialDecodingStreamReader<T>.
+         It previously came in transitively via the published Google.Apis.Auth that the old Gax.Grpc referenced;
+         now that production code is Newtonsoft-free, reference it explicitly (test-only, out of Clast scope). -->
+    <PackageReference Include="Newtonsoft.Json" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Google.Api.Gax.Grpc\Google.Api.Gax.Grpc.csproj" />
     <ProjectReference Include="..\Google.Api.Gax.Grpc.Testing\Google.Api.Gax.Grpc.Testing.csproj" />
+    <!-- Clast: the test uses Google.Apis.Auth types (GoogleCredential, ICredential) directly. It used to get
+         Auth transitively via the published Google.Apis.Auth/Grpc.Auth packages; the ported closure flows
+         transitively on net8.0 but not on .NET Framework, so reference the ported Auth directly. -->
+    <ProjectReference Include="..\..\google-api-dotnet-client\Src\Support\Google.Apis.Auth\Google.Apis.Auth.csproj" />
 
     <Compile Update="ClientBuilderBaseTest.*.cs">
       <DependentUpon>ClientBuilderBaseTest.cs</DependentUpon>
