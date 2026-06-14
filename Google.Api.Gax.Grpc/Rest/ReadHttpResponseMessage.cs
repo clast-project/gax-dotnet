@@ -24,7 +24,7 @@ namespace Google.Api.Gax.Grpc.Rest
     /// The function to obtain the response is async, but the function to obtain the
     /// <see cref="Status"/> is not.
     /// For being able to surface error details in <see cref="Status"/> we need to be
-    /// able to call <see cref="HttpContent.ReadAsStringAsync"/> which is an async method,
+    /// able to call <see cref="HttpContent.ReadAsStringAsync()"/> which is an async method,
     /// and thus cannot be done, without blocking, on the sync function that obtains the 
     /// <see cref="Status"/> in the <see cref="AsyncUnaryCall{TResponse}"/>.
     /// So we need to make async content reading part of sending the call and not part of

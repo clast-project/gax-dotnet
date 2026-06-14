@@ -1,10 +1,18 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <Import Project="..\CommonProperties.xml" />
 
   <PropertyGroup>
-    <TargetFrameworks>netstandard2.0;net462</TargetFrameworks>
+    <TargetFrameworks>netstandard2.0;net8.0;net10.0</TargetFrameworks>
     <LangVersion>latest</LangVersion>
+    <!-- Clast: generated protobuf files (*.g.cs) use lower-case using-aliases (pb/pbr/...); the newer C# compiler
+         (SDK 10) flags these as CS8981. They are a codegen convention, not a real concern. -->
+    <NoWarn>$(NoWarn);CS8981</NoWarn>
+  </PropertyGroup>
+
+  <!-- Clast: the net10.0 target is validated for trimming/AOT. -->
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <IsAotCompatible>true</IsAotCompatible>
   </PropertyGroup>
 
   <!-- Packaging information -->
@@ -13,14 +21,45 @@
     <Description>Additional support classes for Google gRPC API client libraries</Description>
   </PropertyGroup>
 
+  <!-- Clast: republished under a Clast.* identity only when -p:Clast=true (see google-api-dotnet-client Google.Apis.Core.csproj). -->
+  <PropertyGroup Condition="'$(Clast)' == 'true'">
+    <PackageId>Clast.Google.Api.Gax.Grpc</PackageId>
+    <AssemblyName>Clast.Google.Api.Gax.Grpc</AssemblyName>
+    <AssemblyOriginatorKeyFile Condition="'$(ClastKeyPath)' != ''">$(ClastKeyPath)</AssemblyOriginatorKeyFile>
+  </PropertyGroup>
+
   <ItemGroup>
-    <ProjectReference Include="..\Google.Api.CommonProtos\Google.Api.CommonProtos.csproj" />
+    <!-- Clast: published Google.Api.CommonProtos (pure protobuf, no Newtonsoft, AOT-compatible unchanged); using
+         a PackageReference keeps the packed Clast dependency pointing at the real published version. -->
+    <PackageReference Include="Google.Api.CommonProtos" />
     <ProjectReference Include="..\Google.Api.Gax\Google.Api.Gax.csproj" />
 
-    <PackageReference Include="Grpc.Auth" />
-    <PackageReference Include="Google.Apis.Auth" />
+    <!-- Clast: reference the locally-ported (System.Text.Json) Google.Apis.Auth (which transitively brings
+         Google.Apis + Google.Apis.Core) instead of the published Newtonsoft-based package. -->
+    <ProjectReference Include="..\..\google-api-dotnet-client\Src\Support\Google.Apis.Auth\Google.Apis.Auth.csproj" />
+
+    <!-- Clast: reference the locally-ported Grpc.Auth (re-pointed to Clast.Google.Apis.Auth) instead of the
+         published Grpc.Auth, which hard-binds the Newtonsoft-based published Google.Apis.Auth and would collide
+         (CS0433) with the renamed Clast.Google.Apis.Auth under -p:Clast=true. -->
+    <ProjectReference Include="..\..\grpc-dotnet\src\Grpc.Auth\Grpc.Auth.csproj" />
     <PackageReference Include="Grpc.Core.Api" />
     <PackageReference Include="Grpc.Net.Client" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
   </ItemGroup>
+
+  <!-- Clast: NuGet metadata stating this is the Clast republish (placed last to override upstream values). -->
+  <PropertyGroup Condition="'$(Clast)' == 'true'">
+    <Title>Clast republish of Google.Api.Gax.Grpc</Title>
+    <Authors>clast-project</Authors>
+    <Company>clast-project</Company>
+    <Copyright>Clast republish. Based on Google.Api.Gax.Grpc (BSD-3-Clause, Copyright Google LLC).</Copyright>
+    <PackageProjectUrl>https://github.com/clast-project/gax-dotnet</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/clast-project/gax-dotnet</RepositoryUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <Description>Clast republish of Google.Api.Gax.Grpc: Newtonsoft.Json replaced with source-generated System.Text.Json, trimming/AOT-compatible, adds a net10.0 target. Namespaces and public type names are unchanged. Independent republish from the clast-project fork — not an official Google package.</Description>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(Clast)' == 'true'">
+    <None Include="..\CLAST_NUGET.md" Pack="true" PackagePath="README.md" />
+  </ItemGroup>
+
 </Project>

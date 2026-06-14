@@ -123,6 +123,14 @@ internal static class ProtobufUtilities
             return originalName;
         }
 
+#if NET10_0_OR_GREATER
+        // Clast: this mirrors Google.Protobuf's own JsonFormatter (see comment above), which performs the
+        // identical reflection over protobuf-generated enum fields and their [OriginalName] attributes.
+        // Those enum types are rooted by the generated message code / protobuf reflection, so their fields
+        // and attributes are preserved. See BC-021.
+        [System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2070",
+            Justification = "Protobuf enum types and their [OriginalName] metadata are preserved by the generated message code and the protobuf runtime; this mirrors Google.Protobuf's JsonFormatter.")]
+#endif
         private static Dictionary<object, string> GetNameMapping(System.Type enumType) =>
             enumType.GetTypeInfo().DeclaredFields
                 .Where(f => f.IsStatic)
