@@ -26,14 +26,15 @@ namespace Google.Api.Gax.Grpc.Tests
         [Fact]
         public void GcePlatform()
         {
+            // Clast/BC-011: STJ (JsonNode.Parse) rejects single-quoted JSON; use valid double quotes.
             const string json = @"
 {
-  'project': {
-    'projectId': 'FakeProjectId'
+  ""project"": {
+    ""projectId"": ""FakeProjectId""
   },
-  'instance': {
-    'id': 'FakeInstanceId',
-    'zone': 'projects/1234567/zones/FakeZone'
+  ""instance"": {
+    ""id"": ""FakeInstanceId"",
+    ""zone"": ""projects/1234567/zones/FakeZone""
   }
 }
 ";
@@ -97,36 +98,37 @@ namespace Google.Api.Gax.Grpc.Tests
         [Fact]
         public void GkePlatform()
         {
+            // Clast/BC-011: STJ (JsonNode.Parse) rejects single-quoted JSON; use valid double quotes.
             const string metadataJson = @"
 {
-  'project': {
-    'projectId': 'FakeProjectId'
+  ""project"": {
+    ""projectId"": ""FakeProjectId""
   },
-  'instance': {
-    'attributes': {
-      'cluster-name': 'FakeClusterName',
-      'cluster-location': 'FakeClusterLocation'
+  ""instance"": {
+    ""attributes"": {
+      ""cluster-name"": ""FakeClusterName"",
+      ""cluster-location"": ""FakeClusterLocation""
     },
-    'id': '123',
-    'zone': 'projects/FakeProject/zones/FakeLocation'
+    ""id"": ""123"",
+    ""zone"": ""projects/FakeProject/zones/FakeLocation""
   }
 }
 ";
             const string namespaceJson = @"
 {
-  'kind': 'Namespace',
-  'metadata': {
-    'uid': 'namespaceid',
-    'name':'namespacename'
+  ""kind"": ""Namespace"",
+  ""metadata"": {
+    ""uid"": ""namespaceid"",
+    ""name"":""namespacename""
   }
 }
 ";
             const string podJson = @"
 {
-  'kind': 'Pod',
-  'metadata': {
-    'name': 'podname',
-    'uid': 'podid'
+  ""kind"": ""Pod"",
+  ""metadata"": {
+    ""name"": ""podname"",
+    ""uid"": ""podid""
   }
 }
 ";

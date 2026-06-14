@@ -1,9 +1,10 @@
 name: Clast CI
 
-# Build + test Google.Api.Gax / Google.Api.Gax.Rest. These reference the locally-ported Google.Apis.* libraries
-# via cross-repo ProjectReferences, so google-api-dotnet-client is checked out as a sibling. The dependency is
-# taken from the PR's branch if a same-named branch exists there (so coordinated cross-repo PRs validate together),
-# otherwise from main. Tests run with the Clast flag OFF (original identity). net8.0 on all OSes; net462 on Windows.
+# Build + test Google.Api.Gax / Google.Api.Gax.Rest / Google.Api.Gax.Grpc. These reference the locally-ported
+# Google.Apis.* libraries via cross-repo ProjectReferences, so google-api-dotnet-client is checked out as a sibling.
+# The dependency is taken from the PR's branch if a same-named branch exists there (so coordinated cross-repo PRs
+# validate together), otherwise from main. Tests run with the Clast flag OFF (original identity). net8.0 on all OSes;
+# net462 on Windows. Gax.Grpc is also built across all TFMs so the net10.0 IsAotCompatible analyzer runs in CI.
 
 on:
   push:
@@ -30,25 +31,35 @@ jobs:
         with:
           path: gax-dotnet
 
-      - name: Resolve google-api-dotnet-client ref
+      - name: Resolve dependency refs
         id: dep
         shell: bash
         run: |
-          REF=main
           HEAD="${{ github.head_ref }}"
-          if [ -n "$HEAD" ] && git ls-remote --exit-code --heads \
-            https://github.com/clast-project/google-api-dotnet-client.git "$HEAD" >/dev/null 2>&1; then
-            REF="$HEAD"
-          fi
-          echo "ref=$REF" >> "$GITHUB_OUTPUT"
-          echo "Using google-api-dotnet-client@$REF"
+          resolve() {
+            local repo="$1" ref="main"
+            if [ -n "$HEAD" ] && git ls-remote --exit-code --heads \
+              "https://github.com/clast-project/$repo.git" "$HEAD" >/dev/null 2>&1; then
+              ref="$HEAD"
+            fi
+            echo "$ref"
+          }
+          echo "api=$(resolve google-api-dotnet-client)" >> "$GITHUB_OUTPUT"
+          echo "grpc=$(resolve grpc-dotnet)" >> "$GITHUB_OUTPUT"
 
       - name: Checkout google-api-dotnet-client (dependency, as sibling)
         uses: actions/checkout@v6
         with:
           repository: clast-project/google-api-dotnet-client
-          ref: ${{ steps.dep.outputs.ref }}
+          ref: ${{ steps.dep.outputs.api }}
           path: google-api-dotnet-client
+
+      - name: Checkout grpc-dotnet (dependency, as sibling)
+        uses: actions/checkout@v6
+        with:
+          repository: clast-project/grpc-dotnet
+          ref: ${{ steps.dep.outputs.grpc }}
+          path: grpc-dotnet
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
@@ -57,7 +68,14 @@ jobs:
             8.0.x
             10.0.x
 
+      - name: Build Google.Api.Gax.Grpc (all TFMs incl. net10.0 AOT analyzer)
+        shell: bash
+        working-directory: gax-dotnet
+        run: dotnet build Google.Api.Gax.Grpc/Google.Api.Gax.Grpc.csproj -c Release
+
       - name: Test
         shell: bash
         working-directory: gax-dotnet
-        run: dotnet test Google.Api.Gax.Tests/Google.Api.Gax.Tests.csproj -c Release
+        run: |
+          dotnet test Google.Api.Gax.Tests/Google.Api.Gax.Tests.csproj -c Release
+          dotnet test Google.Api.Gax.Grpc.Tests/Google.Api.Gax.Grpc.Tests.csproj -c Release

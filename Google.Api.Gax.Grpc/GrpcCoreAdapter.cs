@@ -61,6 +61,17 @@ namespace Google.Api.Gax.Grpc
         /// </summary>
         private static Func<string, ChannelCredentials, GrpcChannelOptions, ChannelBase> CreateChannelFactory()
         {
+#if NET10_0_OR_GREATER
+            // Clast: the legacy Grpc.Core native transport is created via runtime code generation
+            // (Type.MakeGenericType / MethodInfo.MakeGenericMethod / Expression.Compile), which is not
+            // supported under native AOT; Grpc.Core itself is also deprecated. On .NET 10 the default
+            // adapter is always GrpcNetClientAdapter (see
+            // GrpcAdapter.DetectDefaultGrpcTransportAdapterPreferringGrpcNetClient), so this path is only
+            // reached when a caller explicitly opts in to Grpc.Core — which AOT cannot support. See BC-020.
+            throw new PlatformNotSupportedException(
+                "GrpcCoreAdapter (the legacy Grpc.Core transport) is not supported on .NET 10 or under native AOT. " +
+                "Use GrpcNetClientAdapter instead; it is the default on modern .NET.");
+#else
             var optionType = System.Type.GetType("Grpc.Core.ChannelOption, " + GrpcCoreAssemblyName);
             if (optionType is null)
             {
@@ -115,6 +126,7 @@ namespace Google.Api.Gax.Grpc
             // Compile the expression tree into a delegate we can use.
             return Expression.Lambda<Func<string, ChannelCredentials, GrpcChannelOptions, ChannelBase>>(ctorExpression, targetParam, credentialsParam, neutralOptionsParam)
                 .Compile();
+#endif
         }
 
         /// <summary>

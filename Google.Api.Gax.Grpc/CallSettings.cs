@@ -7,7 +7,6 @@
 
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
-using Newtonsoft.Json.Linq;
 using System;
 using System.Linq;
 using System.Text;
