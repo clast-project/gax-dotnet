@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright 2020 Google LLC
  * Use of this source code is governed by a BSD-style
  * license that can be found in the LICENSE file or at
@@ -9,6 +9,7 @@ using Google.Protobuf;
 using Google.Protobuf.Reflection;
 using Grpc.Core;
 using System;
+using System.Collections.Generic;
 using System.Net.Http;
 using System.Threading.Tasks;
 
@@ -21,40 +22,48 @@ namespace Google.Api.Gax.Grpc.Rest;
 /// </summary>
 internal class RestMethod
 {
-    private readonly ApiMetadata _apiMetadata;
     private readonly MethodDescriptor _protoMethod;
     private readonly JsonParser _parser;
-    private readonly HttpRuleTranscoder _transcoder;
+    private readonly ITranscoder _transcoder;
 
     /// <summary>
     /// The service-qualified method name, as used by gRPC, e.g. "/google.somepackage.SomeService/SomeMethod"
     /// </summary>
     internal string FullName { get; }
 
-    private RestMethod(ApiMetadata apiMetadata, MethodDescriptor protoMethod, JsonParser parser, HttpRuleTranscoder transcoder) =>
-        (_apiMetadata, _protoMethod,  _parser, FullName, _transcoder) =
-        (apiMetadata, protoMethod, parser, GetGrpcFullName(protoMethod), transcoder);
+    private RestMethod(MethodDescriptor protoMethod, JsonParser parser, string fullName, ITranscoder transcoder) =>
+        (_protoMethod,  _parser, FullName, _transcoder) =
+        (protoMethod, parser, fullName, transcoder);
 
     /// <summary>
     /// Returns the name by which gRPC will refer to the given proto method,
     /// e.g. "/google.somepackage.SomeService/SomeMethod".
     /// </summary>
-    internal static string GetGrpcFullName(MethodDescriptor method) => $"/{method.Service.FullName}/{method.Name}";
+    private static string GetGrpcFullName(MethodDescriptor method) => $"/{method.Service.FullName}/{method.Name}";
 
     /// <summary>
-    /// Creates a <see cref="RestMethod"/> representation from the given protobuf method representation.
+    /// Creates <see cref="RestMethod"/> representations from the given protobuf method representation.
     /// </summary>
     /// <param name="apiMetadata">The metadata for the API that this method is part of.</param>
     /// <param name="method">The protobuf method to represent.</param>
     /// <param name="parser">The JSON parser to use when parsing requests.</param>
-    /// <returns>A representation of the method that can be used to handle HTTP requests/responses,
-    /// or null if the method is currently not supported in REGAPIC.</returns>
-    internal static RestMethod Create(ApiMetadata apiMetadata, MethodDescriptor method, JsonParser parser)
+    /// <returns>
+    /// A sequence of representations of the method that can be used to handle HTTP requests/responses.
+    /// A representation may be null if the method is currently not supported in REGAPIC.
+    /// </returns>
+    /// <remarks>
+    /// Most protobuf methods will have a single representation. But in some cases, like for
+    /// resumable upload, a single protobuf method will have several representations, e.g.
+    /// one for "start", one for "upload", one for "query", etc.
+    /// </remarks>
+    internal static IEnumerable<KeyValuePair<string,RestMethod>> Create(ApiMetadata apiMetadata, MethodDescriptor method, JsonParser parser)
     {
+        string methodGrpcName = GetGrpcFullName(method);
         // We don't support client streaming (and bidi) methods with REST.
         if (method.IsClientStreaming)
         {
-            return null;
+            yield return new KeyValuePair<string, RestMethod>(methodGrpcName, null);
+            yield break;
         }
         var rule = method.GetOptions()?.GetExtension(AnnotationsExtensions.Http);
         // If we have an override, it completely replaces the original rule,
@@ -66,10 +75,26 @@ internal class RestMethod
         // If we still haven't got a rule, this method isn't supported in REGAPIC.
         if (rule is null)
         {
-            return null;
+            yield return new KeyValuePair<string, RestMethod>(methodGrpcName, null);
+            yield break;
         }
-        var transcoder = new HttpRuleTranscoder(method.FullName, method.InputType, rule);
-        return new RestMethod(apiMetadata, method, parser, transcoder);
+
+        if (IsResumableUploadMethod(method.FullName, apiMetadata, out string prefix))
+        {
+            string startedName = $"{methodGrpcName}#started";
+            methodGrpcName = $"{methodGrpcName}#start";
+            if (prefix is null)
+            {
+                yield return new KeyValuePair<string, RestMethod>(methodGrpcName, null);
+                yield return new KeyValuePair<string, RestMethod>(startedName, null);
+                yield break;
+            }
+
+            yield return new KeyValuePair<string, RestMethod>(startedName, new RestMethod(method, parser, startedName, ResumableUploadTranscoder.Instance));
+        }
+
+        var transcoder = new HttpRuleTranscoder(method.FullName, method.InputType, rule, apiMetadata);
+        yield return new KeyValuePair<string, RestMethod>(methodGrpcName, new RestMethod(method, parser, methodGrpcName, transcoder));
     }
 
     internal HttpRequestMessage CreateRequest(IMessage request, string host)
@@ -77,12 +102,7 @@ internal class RestMethod
         var transcodingOutput = _transcoder.Transcode(request)
             ?? throw new RpcException(new Status(StatusCode.InvalidArgument,
                 "Request could not be transcoded; it does not match any HTTP rule. Please check that all required fields are set with appropriate values."));
-
-        if (_apiMetadata.RequestNumericEnumJsonEncoding)
-        {
-            transcodingOutput = transcodingOutput.WithAdditionalQueryParameter("$alt", "json;enum-encoding=int");
-        }
-        return transcodingOutput.CreateRequest(host);
+        return transcodingOutput.ToHttpRequestMessage(host);
     }
 
     /// <summary>
@@ -110,4 +130,29 @@ internal class RestMethod
     /// <typeparam name="TResponse">The response type to parse; this is expected to match the method output type.</typeparam>
     internal TResponse ParseJson<TResponse>(string json) =>
         (TResponse) _parser.Parse(json, _protoMethod.OutputType);
+
+    // TODO: Hardcoded method names will be replaced by inspecting a value on the HttpRule
+    // once service configs and proto annotations are available.
+    internal static bool IsResumableUploadMethod(string methodFullName, ApiMetadata apiMetadata, out string resumableUploadPrefix)
+    {
+        resumableUploadPrefix = null;
+        // TODO: This should examine the HttpRule associated to the method once that's possible.
+        bool isResumableUpload = s_resumableUploadAllowlist.Contains(methodFullName);
+        if (isResumableUpload)
+        {
+            resumableUploadPrefix = apiMetadata.ResumableUploadPrefix;
+        }
+        // Note that it's possible to return true here, but there might be no prefix.
+        // That's fine, we need to skip a method that's marked as resumable upload in the annotation
+        // but where there are no resumable upload settings on the service configuration.
+        return isResumableUpload;
+    }
+
+    private static readonly HashSet<string> s_resumableUploadAllowlist = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "google.showcase.v1beta1.ResumableUploadService.UploadMedia",
+        "google.ads.googleads.v23.services.YouTubeVideoUploadService.CreateYouTubeVideoUpload",
+        "google.ads.googleads.v24.services.YouTubeVideoUploadService.CreateYouTubeVideoUpload",
+        "google.ads.googleads.v25.services.YouTubeVideoUploadService.CreateYouTubeVideoUpload",
+    };
 }
