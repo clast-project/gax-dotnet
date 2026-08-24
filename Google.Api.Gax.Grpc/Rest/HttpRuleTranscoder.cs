@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright 2022 Google LLC
  * Use of this source code is governed by a BSD-style
  * license that can be found in the LICENSE file or at
@@ -17,11 +17,13 @@ namespace Google.Api.Gax.Grpc.Rest;
 
 /// <summary>
 /// A transcoder for an HttpRule, including any additional bindings, which are
-/// applied in turn until a match is found with a <see cref="TranscodingOutput"/> result.
+/// applied in turn until a match is found with a <see cref="HttpRuleTranscodingOutput"/> result.
 /// </summary>
-internal sealed partial class HttpRuleTranscoder
+internal sealed partial class HttpRuleTranscoder : ITranscoder
 {
     private readonly List<SingleRuleTranscoder> _transcoders;
+    private readonly ApiMetadata _apiMetadata;
+    private readonly string _methodName;
 
     /// <summary>
     /// Creates a transcoder for the given method (named only for error messages) with the specified
@@ -29,22 +31,36 @@ internal sealed partial class HttpRuleTranscoder
     /// for google.api.HttpRule (https://github.com/googleapis/googleapis/blob/master/google/api/http.proto#L44-L312)
     /// </summary>
     /// <param name="methodName">Name of the method, used only for diagnostic purposes.</param>
-    /// <param name="requestMessage">The descriptor for the message request type</param>
+    /// <param name="requestMessage">The descriptor for the message request type.</param>
     /// <param name="rule">The HttpRule that the new transcoder should represent, excluding any additional bindings.</param>
-    internal HttpRuleTranscoder(string methodName, MessageDescriptor requestMessage, HttpRule rule)
+    /// <param name="apiMetadata">Metadata for the API the method belongs to.</param>
+    internal HttpRuleTranscoder(string methodName, MessageDescriptor requestMessage, HttpRule rule, ApiMetadata apiMetadata)
     {
+        _methodName = methodName;
         _transcoders = new List<SingleRuleTranscoder> { new SingleRuleTranscoder(methodName, requestMessage, rule) };
         _transcoders.AddRange(rule.AdditionalBindings.Select(binding => new SingleRuleTranscoder(methodName, requestMessage, binding)));
+        _apiMetadata = apiMetadata;
     }
 
     /// <summary>
     /// Returns the transcoding result from the first matching HttpRule, or
     /// null if no rules match.
     /// </summary>
-    internal TranscodingOutput Transcode(IMessage request) =>
-        _transcoders
+    ITranscodingOutput ITranscoder.Transcode(IMessage request)
+    {
+        var output = _transcoders
             .Select(t => t.Transcode(request))
             .FirstOrDefault(result => result is not null);
+        if (RestMethod.IsResumableUploadMethod(_methodName, _apiMetadata, out string prefix) && prefix is not null)
+        {
+            output = output?.WithPrefix(prefix);
+        }
+        if (_apiMetadata.RequestNumericEnumJsonEncoding)
+        {
+            output = output?.WithAdditionalQueryParameter("$alt", "json;enum-encoding=int");
+        }
+        return output;
+    }
 
     /// <summary>
     /// A transcoder for a single rule, ignoring additional bindings.
@@ -169,7 +185,7 @@ internal sealed partial class HttpRuleTranscoder
         /// </summary>
         /// <param name="request">The request to transcode. Must not be null.</param>
         /// <returns>The result of transcoding, or null if the rule did not match.</returns>
-        internal TranscodingOutput Transcode(IMessage request)
+        internal HttpRuleTranscodingOutput Transcode(IMessage request)
         {
             string path = _pathPattern.TryFormat(request);
             if (path is null)
@@ -180,7 +196,7 @@ internal sealed partial class HttpRuleTranscoder
             var queryParameters = from field in _queryParameterFields
                                   from value in field.GetValues(request)
                                   select new KeyValuePair<string, string>(field.Name, value);
-            return new TranscodingOutput(_httpMethod, path, queryParameters, body);
+            return new HttpRuleTranscodingOutput(_httpMethod, path, queryParameters, body);
         }
     }
 
